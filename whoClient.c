@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,39 +12,57 @@
 #include <signal.h>
 #include <time.h>
 #include <sys/time.h>
-//#include "functions.h"
 #include <sys/socket.h>
 #include <arpa/inet.h>
-
+#include <pthread.h>
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t dev;
 
+typedef struct data {
 
-struct data_t {
-    int id;
-    int sleep;
+   int noOlines; 
+   char **command;
+   int num;
+   int sock;
 
-    char command[100];
-};
+}data;
 
-void* thread(void *arg)
+int m = 0;
+void* thread(void *d)
 {
-    struct data_t *data = arg;
+    data * temp = (data*) d;
 
-
+    int j = 0;
     pthread_mutex_lock(&mutex);
-    //printf("Thread %d: waiting for release\n", data->id);
-
     pthread_cond_wait(&cond, &mutex);
     pthread_mutex_unlock(&mutex); // unlocking for all other threads
 
-    struct timeval tv;
-    gettimeofday(&tv, NULL);    
+    char buff[100]; 
 
-    printf("Thread %d: doing some work for %d secs, started: %ld...\n", data->id, data->sleep, tv.tv_sec);
-    sleep(data->sleep);
-    gettimeofday(&tv, NULL);    
-    printf("Thread %d: Bye, end at %ld\n", data->id, tv.tv_sec);
+    bzero(buff, sizeof(buff));
+
+    // kanw lock giati i metavliti m einai koini anamesa sta threads
+
+    pthread_mutex_lock(&dev); 
+    strcpy(buff,temp->command[m]); 
+
+    printf("Thread is sending the command: %s\n",buff);
+
+    //write line to server
+    write(temp->sock, buff, sizeof(buff)); 
+
+    // read from server
+    bzero(buff, sizeof(buff)); 
+    read(temp->sock, buff, sizeof(buff)); 
+    printf("The asnwer from server is : %s\n", buff); 
+    // if ((strncmp(buff, "exit", 4)) == 0 && (m) == temp->num - 1) { 
+    //     printf("Client Exit...\n"); 
+    // } 
+    m++;
+
+    pthread_mutex_unlock(&dev); 
+
 }
 
 int main (int argc,char* argv[]){
@@ -85,14 +104,11 @@ int main (int argc,char* argv[]){
        
     } 
 
-
-
     if(!(queryfile != NULL || servPort != 0 || servIP != NULL || numThreads != 0)){
 
         printf("Wrong inputs: inputs must be like './whoClient –q queryFile -numThreads –sp servPort –sip servIP' \n");  
 
     }
-
 
     //open the file to read it
     FILE *fp;
@@ -102,86 +118,57 @@ int main (int argc,char* argv[]){
     { 
         printf("Could not open file"); 
     } 
+    //metraw poses grammes exei to arxeio
+    char ch;
+    int nolines = 0;
 
-    //Start reading the file line by line
+    while(!feof(fp))
+    {
+      ch = fgetc(fp);
+      if(ch == '\n')
+      {
+        nolines++;
+      }
+    }
+    
+    nolines++;
+    printf("%d\n",nolines );
+
+    rewind(fp);
+
     char* line = NULL;
     size_t len = 0;
 
-    struct data_t data[9];
-
+    data *d = malloc( numThreads * sizeof(data));
+    d->command = malloc(nolines*sizeof(char*));
+    d->noOlines = nolines;
+    d->num = numThreads;
 
     pthread_t* threads;
-
     threads = malloc(numThreads * sizeof(pthread_t));
 
-
     int to_create = numThreads;
-    while (getline(&line, &len, fp) != EOF) {
+
+    if(numThreads - nolines >0){
 
 
-        printf("Creating thread\n");      
+        to_create = nolines;
 
-        if(to_create > 0){
-
-        //create to_create
-        data[to_create].id = to_create + 1;
-        data[to_create].sleep = 1 + rand() % 6;
-
-
-        sscanf(line,"%s",data[to_create].command);
-        // strcpy(data->command[to_create] , line);
-
-        printf("%s\n",data[to_create].command); 
-                
-        pthread_create(&threads[to_create], NULL, thread, data + to_create);
-
-        to_create--;
-
-        }  
-
-        // an mas teleiwsoyn ta threads stelnw prwta ta numThreads kai meta kanw kai ta upoloipa
-        if(to_create == 0){
-
-        printf("DONE CREATING %d THREADS\n",numThreads);
-
-        // printf("making to create %d\n",numThreads );
-        // give time for all threads to lock
-        sleep(1);
-
-        printf("Master: Now releasing %d threads \n",numThreads);
-
-        pthread_cond_broadcast(&cond);
-
-        for(int i = 0; i < numThreads; ++i)
-            pthread_join((threads[i] ), NULL);
-
-        to_create = numThreads;
-        continue;
-
-        }       
-        //pthread_create(ths + i, NULL, thread, data + i);
-
-        // to_create--;
-        // printf("TO CREATE %d\n",to_create );     
     }
-    printf("DONE CREATING THE THREADS\n");
-
-    // give time for all threads to lock
-    sleep(1);
-
-    printf("Master: Now releasing the condition\n");
-
-    pthread_cond_broadcast(&cond);
-
-    for(int i = 0; i < numThreads; ++i)
-        pthread_join((threads[i] ), NULL);
 
 
+    int rem = d->noOlines - numThreads;
+
+    printf("lines %d\n",d->noOlines);
+    printf("REM at start %d\n",rem );
+
+    int pos = 0;
+
+    //--------------------------------- create socket and connect to server ---------------------------------
     int sockfd;
-    
+                
     //socket create and varification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    //sockfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd == -1) {
         perror("socket creation failed...\n");
     }
@@ -189,14 +176,78 @@ int main (int argc,char* argv[]){
     /* Construct the server address structure */
     memset(&server_addr, 0, sizeof(server_addr));       /* Zero out structure */
     server_addr.sin_family      = AF_INET;              /* Internet address family */
-    server_addr.sin_addr.s_addr = inet_addr(servIP); /* Server IP address */
+    inet_pton(AF_INET,servIP,&server_addr.sin_addr);/* Server IP address */
     server_addr.sin_port        = htons(servPort);   /* Server port */
+
+    d->sock = sockfd;
+
+    printf("Connecting to server..\n");
 
     /* Establish the connection to the server */
     if (connect(sockfd, (struct sockaddr*) &server_addr, sizeof(server_addr)) < 0)
         perror("connect() failed, could not find server.");
+    else
+        printf("Connection Established!\n");
 
-    else  printf("connected\n");
 
-free(queryfile);
+    // ------------- diavazw grammi grammi to arxeio -------------------------------------------------
+
+    int remlines = nolines;
+    while (getline(&line, &len, fp) != EOF) {
+
+
+        if(to_create > 0){
+
+            d->command[pos] = malloc((strlen(line)+1)*sizeof(char));
+
+            strcpy(d->command[pos],line);
+
+            pthread_create(&threads[pos], NULL, thread,(void*)d);
+           
+            to_create--;
+            pos ++;
+            remlines --;
+
+        }  
+
+        // an mas teleiwsoyn ta threads stelnw prwta ta numThreads kai meta kanw kai ta upoloipa
+        if(to_create == 0 || remlines == 0){
+
+          //  printf("to_create is %d\n",to_create );
+            printf("DONE CREATING THREADS %d \n",numThreads);
+            
+            // give time for all threads to lock
+            //sleep(2);
+
+            printf("Client is now releasing %d threads \n",numThreads);
+
+            pthread_cond_broadcast(&cond);
+
+
+            for (int i = 0; i < numThreads; ++i){
+
+                pthread_join((threads[i] ), NULL);
+            }
+
+            to_create = numThreads;
+            continue;
+
+        } 
+
+    }
+
+    // frees    
+
+    for(int k=0;k<nolines;k++){
+
+        free(d->command[k]);
+        d->command[k] = NULL;
+    }
+    free(d->command);
+    // d->command = NULL; 
+
+    // free(d);
+   // free(threads);
+    close(sockfd);
+    free(queryfile);
 }
