@@ -15,9 +15,11 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t dev;
+
 
 typedef struct data {
 
@@ -25,6 +27,8 @@ typedef struct data {
    char **command;
    int num;
    int sock;
+   int port;
+   char* ip;
 
 }data;
 
@@ -33,18 +37,55 @@ void* thread(void *d)
 {
     data * temp = (data*) d;
 
+
     int j = 0;
+    
     pthread_mutex_lock(&mutex);
+
+
+
     pthread_cond_wait(&cond, &mutex);
     pthread_mutex_unlock(&mutex); // unlocking for all other threads
 
+    
+
+    // kanw lock giati i metavliti m einai koini anamesa sta threads
+
+    pthread_mutex_lock(&mutex); 
+
+
+    int sockfd;
+    struct sockaddr_in server_addr;     /* Server address */
+    
+          
+    //socket create and varification
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if(sockfd == -1) {
+        perror("socket creation failed...\n");
+    }
+
+    /* Construct the server address structure */
+    memset(&server_addr, 0, sizeof(server_addr));        /*Zero out structure*/ 
+    server_addr.sin_family      = AF_INET;              /* Internet address family */
+    inet_pton(AF_INET,temp->ip,&server_addr.sin_addr);/* Server IP address */
+    server_addr.sin_port        = htons(temp->port);   /* Server port */
+
+    temp->sock = sockfd;
+
+    printf("sock is %d\n",temp->sock);
+
+    printf("Connecting to server..\n");
+
+    /* Establish the connection to the server */
+    if (connect(sockfd, (struct sockaddr*) &server_addr, sizeof(server_addr)) < 0)
+        perror("connect() failed, could not find server.");
+    else
+       printf("Connection Established!\n");
+    
     char buff[100]; 
 
     bzero(buff, sizeof(buff));
 
-    // kanw lock giati i metavliti m einai koini anamesa sta threads
-
-    pthread_mutex_lock(&dev); 
     strcpy(buff,temp->command[m]); 
 
     printf("Thread is sending the command: %s\n",buff);
@@ -52,16 +93,16 @@ void* thread(void *d)
     //write line to server
     write(temp->sock, buff, sizeof(buff)); 
 
-    // read from server
-    bzero(buff, sizeof(buff)); 
-    read(temp->sock, buff, sizeof(buff)); 
-    printf("The asnwer from server is : %s\n", buff); 
-    // if ((strncmp(buff, "exit", 4)) == 0 && (m) == temp->num - 1) { 
-    //     printf("Client Exit...\n"); 
-    // } 
+    //read from server
+    // bzero(buff, sizeof(buff)); 
+    // read(temp->sock, buff, sizeof(buff)); 
+    // printf("The asnwer from server is : %s\n", buff); 
+    // // if ((strncmp(buff, "exit", 4)) == 0 && (m) == temp->num - 1) { 
+    // //     printf("Client Exit...\n"); 
+    // // } 
     m++;
-
-    pthread_mutex_unlock(&dev); 
+    close(sockfd); 
+    pthread_mutex_unlock(&mutex); 
 
 }
 
@@ -71,7 +112,6 @@ int main (int argc,char* argv[]){
 	int servPort = 0;
 	char* servIP;
 	int numThreads = 0;
-    struct sockaddr_in server_addr;     /* Server address */
 
     for(int i = 0; i < argc; i++){
         
@@ -143,6 +183,9 @@ int main (int argc,char* argv[]){
     d->command = malloc(nolines*sizeof(char*));
     d->noOlines = nolines;
     d->num = numThreads;
+    d->sock = 0;
+    d->port = servPort;
+    d->ip = servIP;
 
     pthread_t* threads;
     threads = malloc(numThreads * sizeof(pthread_t));
@@ -165,37 +208,42 @@ int main (int argc,char* argv[]){
     int pos = 0;
 
     //--------------------------------- create socket and connect to server ---------------------------------
-    int sockfd;
-                
-    //socket create and varification
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(sockfd == -1) {
-        perror("socket creation failed...\n");
-    }
+    // int sockfd;
+    // struct sockaddr_in server_addr;     /* Server address */
+          
+    // //socket create and varification
+    // sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    // if(sockfd == -1) {
+    //     perror("socket creation failed...\n");
+    // }
 
-    /* Construct the server address structure */
-    memset(&server_addr, 0, sizeof(server_addr));       /* Zero out structure */
-    server_addr.sin_family      = AF_INET;              /* Internet address family */
-    inet_pton(AF_INET,servIP,&server_addr.sin_addr);/* Server IP address */
-    server_addr.sin_port        = htons(servPort);   /* Server port */
+    // /* Construct the server address structure */
+    // memset(&server_addr, 0, sizeof(server_addr));        /*Zero out structure*/ 
+    // server_addr.sin_family      = AF_INET;              /* Internet address family */
+    // inet_pton(AF_INET,servIP,&server_addr.sin_addr);/* Server IP address */
+    // server_addr.sin_port        = htons(servPort);   /* Server port */
 
-    d->sock = sockfd;
+    // d->sock = sockfd;
 
-    printf("Connecting to server..\n");
+    // printf("sock in struct %d\n",d->sock );
 
-    /* Establish the connection to the server */
-    if (connect(sockfd, (struct sockaddr*) &server_addr, sizeof(server_addr)) < 0)
-        perror("connect() failed, could not find server.");
-    else
-        printf("Connection Established!\n");
+    // printf("Connecting to server..\n");
+
+    // /* Establish the connection to the server */
+    // if (connect(sockfd, (struct sockaddr*) &server_addr, sizeof(server_addr)) < 0)
+    //     perror("connect() failed, could not find server.");
+    // else
+    //    printf("Connection Established!\n");
 
 
     // ------------- diavazw grammi grammi to arxeio -------------------------------------------------
 
     int remlines = nolines;
+    int created;
     while (getline(&line, &len, fp) != EOF) {
+            
 
-
+       
         if(to_create > 0){
 
             d->command[pos] = malloc((strlen(line)+1)*sizeof(char));
@@ -207,11 +255,13 @@ int main (int argc,char* argv[]){
             to_create--;
             pos ++;
             remlines --;
+            created;
 
         }  
 
         // an mas teleiwsoyn ta threads stelnw prwta ta numThreads kai meta kanw kai ta upoloipa
         if(to_create == 0 || remlines == 0){
+
 
           //  printf("to_create is %d\n",to_create );
             printf("DONE CREATING THREADS %d \n",numThreads);
@@ -248,6 +298,6 @@ int main (int argc,char* argv[]){
 
     // free(d);
    // free(threads);
-    close(sockfd);
+    //close(sockfd);
     free(queryfile);
 }

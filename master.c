@@ -13,6 +13,7 @@
 #include "preprocessing.h"
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
 int pstrcmp( const void* a, const void* b )
 {
@@ -36,11 +37,7 @@ int main (int argc,char* argv[]){
     LinkedList* diseaselist = allocate_list();
 
 
-    //--------------------------------------------global stats -------------------------------------
-    disease_node *head_disease = malloc(sizeof(disease_node));
-    head_disease->stats = malloc(sizeof(Stats));
-    strcpy(head_disease->stats->diseaseID,"HEAD");
-    head_disease->next = NULL; 
+    
 
     //-------------------------------------------------------------------------
 
@@ -147,7 +144,36 @@ int main (int argc,char* argv[]){
         numWorkers = countryNum; // posoi worker tha doulevoun
         per_dir = 1;
     }
-     
+    
+    // ------------------------------ files for stats -----------------------------
+
+        FILE **filestat;
+        char filename[50];
+        int i;
+        
+        char **names = malloc(50 * sizeof(char));
+
+
+        filestat = malloc( sizeof(FILE *) * 50);
+
+        for (int i = 0; i < numWorkers; i++)
+        {
+            sprintf(filename,"stats_Worker%d",i);
+
+            names[i] = malloc(20 *sizeof(char));
+            strcpy(names[i],filename);
+
+            filestat[i] = fopen(filename, "a+");
+
+
+            if(filestat[i] == NULL)
+            {
+                printf("Error: File \"%s\" cannot be opened\n", filename);
+                continue;
+            } else printf("created file %s \n",filename);
+
+        }
+
 
     //------------------------------------------ ftiaxnw tous workers -------------------------------------------------------------
 
@@ -168,13 +194,18 @@ int main (int argc,char* argv[]){
     //-------------- create the workers -----------------
 
     int worker_port = 9000;
+    int position = 0;
+    char n[100];
 
     for(int i = 0; i < numWorkers; i++){
 
 
         //printf("i is %d port is %d\n",i,worker_port );
-                worker_port++;
+        worker_port++;
+        
 
+        printf("%d\n",position);
+        strcpy(n,names[i]);
 
         childpid = fork();
 
@@ -189,9 +220,8 @@ int main (int argc,char* argv[]){
             printf("i is : %d .Process has as ID the number : % ld with parent id : %ld \n",i,(long)getpid(),(long)parent);
             break;
         }   
-    
-    }
-
+    position++;
+    }   
 
     //if parent
     if(parent == getpid()){
@@ -346,39 +376,6 @@ int main (int argc,char* argv[]){
             }
 
         }
-    
-        // //diavazw ta statistics apo tous workers
-        // Stats *get_stats = malloc(sizeof(Stats));
-        // for (int i = 0; i < numWorkers; ++i){
-
-        //     int nread,print_folder=1;
-        //     char prev_date[100]="";
-        //     do {
-        //         if((nread = read(readfds[i],get_stats,sizeof(Stats))) < 0){
-        //             perror ( " Error in Reading " );
-        //         }
-        //         if(print_folder==1){
-        //             print_folder = 0;
-        //             printf("%s\n",get_stats->countryName);
-        //         }
-        //         if(strcmp(get_stats->diseaseID,"ENDOFFOLDER")==0){
-        //             print_folder = 1;
-        //             folders[i]--;
-        //             continue;
-        //         }
-        //         if(strcmp(prev_date,get_stats->date)!=0){
-        //             printf("%s\n",get_stats->date);
-        //             strcpy(prev_date,get_stats->date);
-        //         }
-        //         printf("%s\n",get_stats->diseaseID);
-        //         printf("Age range 0-20 years: %d cases\n",get_stats->range1);
-        //         printf("Age range 21-40 years: %d cases\n",get_stats->range2);
-        //         printf("Age range 41-60 years: %d cases\n",get_stats->range3);
-        //         printf("Age range 60+ years: %d cases\n",get_stats->range4);
-        //     }while (folders[i]>0);
-
-        // }
-        // free(get_stats);
         //--------------------------------- afou stalthoun oi katalogoi tha perimenei input --------------------------  
             
         char* command;
@@ -420,13 +417,14 @@ int main (int argc,char* argv[]){
                 char *port;    
                 char buf[buffsize];
                 int res;
+                struct hostent *remstat;
 
                 int pos = returnPosWorker(numWorkers,getpid(),workers);
                 
                 printf("PORT %d\n",worker_port);            
                         
                 //char FIFO1[24]; // to read
-                char FIFO2[24]; // to write
+                 char FIFO2[24]; // to write
 
                // sprintf(FIFO1,"Input%d", pos);
                 sprintf(FIFO2,"Output%d",pos);
@@ -443,38 +441,63 @@ int main (int argc,char* argv[]){
                 /* Create Socket */
 
                 // gia kathe worker anoigw ena socket
-                int sock , valread; 
+
+                // tou kathe worker
+                int sock , serversock; 
                 struct sockaddr_in serv_addr; 
                 struct sockaddr *serverptr =( struct sockaddr *) & serv_addr ;
 
-                //malloc soket
+
+                struct sockaddr_in toserv_addr; 
+                struct sockaddr *toserverptr =( struct sockaddr *) & toserv_addr ;
+
                 if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
                 { 
                     printf("\n Socket creation error \n"); 
                     return -1; 
-                } 
+                }
+
 
 
                 /* Construct the server address structure */
                 memset(&serv_addr, 0, sizeof(serv_addr));       /* Zero out structure */
                 serv_addr.sin_family      = AF_INET;              /* Internet address family */
                 inet_pton(AF_INET,serverIP,&serv_addr.sin_addr);/* Server IP address */
-                serv_addr.sin_port        = htons(serverPort);   /* Server port */
+                serv_addr.sin_port        = htons(0);   /* Server port */
 
-                
-                // int tr=1;
 
-                // // kill "Address already in use" error message
-                // if (setsockopt(sock,SOL_SOCKET,SO_REUSEADDR,&tr,sizeof(int)) == -1) {
-                //     perror("setsockopt");
-                //     exit(1);
-                // }
+                int tr=1;
 
-                // if (bind(sock,serverptr,sizeof(serv_addr))<0){
-                //     perror("ERROR: Binding failed\n");
-                //     return 3;
-                // }
+                // kill "Address already in use" error message
+                 if (setsockopt(sock,SOL_SOCKET,SO_REUSEADDR,&tr,sizeof(int)) == -1) {
+                    perror("setsockopt");
+                    exit(1);
+                }
 
+                if (bind(sock,serverptr,sizeof(serv_addr))<0){
+                    perror("ERROR: Binding failed\n");
+                    return 3;
+                }
+
+                if (listen(sock,5) < 0 ){
+                    perror("ERROR: Linstening failed\n");
+                    return 3;
+                }
+
+
+                int len = sizeof(serv_addr);
+               // getsockname(sock, (struct sockaddr *) &serv_addr, &len);
+
+                if (getsockname(sock, (struct sockaddr *)&serv_addr, &len) == -1)
+                    perror("getsockname");
+                // else
+                //     printf("port number %d\n", ntohs(serv_addr.sin_port));
+                     
+                int workerport = ntohs(serv_addr.sin_port);
+
+                printf("%d\n",workerport );
+
+                fprintf(filestat[position], "%d\n",workerport);
 
 
                 while(1){
@@ -489,14 +512,13 @@ int main (int argc,char* argv[]){
                         }
                         else if (res == 0)
                             break;
-                   
+                        
+
                         char cpy[100];
 
                         strcpy(cpy,buf);
 
                         if(strcmp(strtok(cpy," ") , "PARAMS" ) == 0){
-
-                            
 
                             IP = strtok(NULL," ");
                             port = strtok(NULL," ");
@@ -506,62 +528,235 @@ int main (int argc,char* argv[]){
                             strcpy(info->ip,IP);
                             strcpy(info->port,port);
 
-                            printf("ip is %s , port is %s\n",info->ip,info->port );
+                            printf("Server ip is %s , Server port is %s\n",info->ip,info->port );
+
+                            // ftiaxnw to socket pou tha sindethw ston server
 
 
-                            memset(&serv_addr, 0, sizeof(serv_addr));
-                            serv_addr.sin_family = AF_INET; 
-                            serv_addr.sin_port = htons(serverPort); 
-                            inet_pton(AF_INET,IP,&serv_addr.sin_addr);
+                            if ((serversock = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
+                            { 
+                                printf("\n Socket creation error \n"); 
+                                return -1; 
+                            }
 
 
+                            memset(&toserv_addr, 0, sizeof(toserv_addr));
+                            toserv_addr.sin_family = AF_INET; 
+                            toserv_addr.sin_port = htons(serverPort); 
+                            inet_pton(AF_INET,IP,&toserv_addr.sin_addr);/* Server IP address */
+
+                    
                             printf(" connections to port %d\n",serverPort);
 
         
 
-                            if(connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) 
+                            if(connect(serversock, (struct sockaddr *)&toserv_addr, sizeof(toserv_addr)) < 0) 
                             { 
                                 perror("\nConnection Failed \n");
 
                             }   
+                                char hostbuffer[256]; 
 
-                            // for (int i = 0; i < numWorkers; ++i)
                     
                                 char buff[100]; 
+                                char statbuff[100];
+
+                                // stelnw to worker port
+
+                                strcpy(statbuff,n);
+
+                                //write to server
+                                write(serversock, statbuff, sizeof(statbuff)); 
+
+
+                                printf("Woker %d is listening for connections from server to port: %d\n",position,workerport);
+                                int hostname;
+
+                                hostname = gethostname(hostbuffer, sizeof(hostbuffer)); 
+                                remstat = gethostbyname(hostbuffer);
+
+                                int statsock;
+                                int len = sizeof(serv_addr);
+
+                                if( ( statsock = accept (sock , serverptr , &len )) <0 ){
+                                    perror("ERROR: Accepting connection from worker\n");
+                                    return 3;
+                                }
+                                if ( (remstat=gethostbyaddr((char*)&serv_addr.sin_addr.s_addr,
+                                    sizeof(serv_addr.sin_addr.s_addr), serv_addr.sin_family ))==NULL){
+                                    perror("ERROR: gethostbyaddr\n");
+                                    return 3;
+                                }
+                                printf("Connection Accepted from: %s\n",remstat->h_name);
+
+
                                 char buff1[100];
+                                int readparm;
+                                memset(buff1, '\0', sizeof (buff1));
 
-                                bzero(buff, sizeof(buff));
-                                //strcpy(buff,worker_port);
+                                if ((readparm = read(statsock,buff1,sizeof(buff1)) )< 0) {
 
+                                    perror ( "problem in reading \n" ) ;
+                                        break;
 
-                                sprintf(buff,"%d" , worker_port);
+                                }
+                                else if (readparm == 0)
+                                    break;
 
-                                
-                                //write line to server
-                               // write(sock, buff, sizeof(buff)); 
+                                printf("I GOT %s\n",buff1 );
 
-                                strcpy(buff1,"stats");
-                                printf("BUFF IS %s\n",buff1 );
-
-                                write(sock,buff1,sizeof(buff1));
-                            
-                                // int red;
-                                // memset(buf, '\0', sizeof (buf));
-
-                                // if ((red = read(readfd,buf,buffsize) )< 0) {
-
-                                // perror ( "problem in reading \n" ) ;
-                                //     break;
-
-                                // }
-                                // else if (red == 0)
-                                //     break;    
+                                char cpy1[100];
+                                char cpy2[100];
+                                char cpy3[100];
+                                char cpy4[100];
 
 
-                            // break;
+                                strcpy(cpy1,buff1);
+                                strcpy(cpy2,buff1);
+                                strcpy(cpy3,buff1);
+                                strcpy(cpy4,buff1);
 
-                        }
+
+                                // pairnw to query kai vlepw ti einai kai apantaw
+
+
+                                //works for id-name-surname-disease-age 
+                                if(strcmp(strtok(buf," "),"/searchPatientRecord") == 0) 
+                                {   
+
+                                    int final = 0;
+                                    char m[100];
+                                    recid = strtok(NULL," ");
+
+
+                                    //printf("%s\n",recid);
+                                    final += searchPatientRecord(countrylist,recid);
+
+                                    //printf("%d\n",final);
+                                    sprintf(m, "%d", final);
+
+                                    if ((res= write(writefd,m,sizeof(m))) == 0) {
+
+                                        perror ( "problem in writing \n" ) ;
+                                    }   
+
+                                }
+
+                                // /diseaseFrequency virusName date1 date2 [country]
+                                else if(strcmp(strtok(cpy1," "),"/diseaseFrequency") == 0){
+
+                                    int final = 0;
+                                    char m[100];
+
+                                    virus = strtok(NULL," ");
+                                    parameter1 = strtok(NULL," "); 
+                                    parameter2 = strtok(NULL," ");
+                                    vcountry = strtok(NULL," ");
+
+                         
+                                    if (vcountry == NULL)
+                                    {   
+
+                                        
+                                        final += disease_frequency(diseaselist,virus,parameter1,parameter2);
+
+                                        sprintf(m, "%d", final);
+                                        //printf("FINAL %d\n",final);
+
+                                        if ((res= write(writefd,m,sizeof(m))) == 0) {
+
+                                        perror ( "problem in writing \n" ) ;
+                                        }
+                                    }
+                                    else {
+
+                                        final += disease_frequency_with_param(diseaselist,virus,parameter1,parameter2,vcountry);
+                                        sprintf(m, "%d", final);
+
+                                        if ((res= write(writefd,m,sizeof(m))) == 0) {
+
+                                        perror ( "problem in writing \n" ) ;
+                                        }
+                                    }
+
+                                }
+                                // /numPatientAdmissions disease date1 date2 [country]
+                                else if(strcmp(strtok(cpy2," "),"/numPatientAdmissions") == 0) 
+                                {
+                                    int final = 0;
+                                    char m[100];
+
+                                    virus = strtok(NULL," ");
+                                    parameter1 = strtok(NULL," "); 
+                                    parameter2 = strtok(NULL," ");
+                                    vcountry = strtok(NULL," ");
+
+
+                                   // printf("%s %s %s %s\n",virus,parameter1,parameter2,vcountry );
+                                    if (vcountry == NULL)
+                                    {
+                                        final += numPatientAdmissions(diseaselist,virus,parameter1,parameter2);
+
+                                        sprintf(m, "%d", final);
+
+                                        if ((res= write(writefd,m,sizeof(m))) == 0) {
+
+                                        perror ( "problem in writing \n" ) ;
+                                        }
+
+                                    } else {
+                                        
+                                        final += numPatientAdmissionsParam(diseaselist,virus,parameter1,parameter2,vcountry);
+                                        sprintf(m, "%d", final);
+
+                                        if ((res= write(writefd,m,sizeof(m))) == 0) {
+
+                                        perror ( "problem in writing \n" ) ;
+                                        }
+                                    }
+
+                                }
+                                // /numPatientDischarges disease date1 date2 [country]
+                                else if(strcmp(strtok(cpy3," "), "/numPatientDischarges") == 0) 
+                                {
+
+                                    int final = 0;
+                                    char m[100];
+
+                                    virus = strtok(NULL," ");
+                                    parameter1 = strtok(NULL," "); 
+                                    parameter2 = strtok(NULL," ");
+                                    vcountry = strtok(NULL," ");
+
+
+                                    if (vcountry == NULL)
+                                    {
+                                        final +=numPatientDischarges(diseaselist,virus,parameter1,parameter2);
+                                        sprintf(m, "%d", final);
+
+                                        if ((res= write(writefd,m,sizeof(m))) == 0) {
+
+                                        perror ( "problem in writing \n" ) ;
+                                        }
+
+                                    } else {
+
+                                        final += numPatientDischargesParam(diseaselist,virus,parameter1,parameter2,vcountry);
+                                        sprintf(m, "%d", final);
+
+                                        if ((res= write(writefd,m,sizeof(m))) == 0) {
+
+                                        perror ( "problem in writing \n" ) ;
+                                        }
+                                     
+                                    }
+
+                                }
+
+                        } 
                             else{
+
+                            printf("position to w %d\n",position);   
 
                             ////////////////////////////////////////////////////////////////////  
                             // FEED DATA //
@@ -606,10 +801,10 @@ int main (int argc,char* argv[]){
 
                             qsort(fileNames, size, sizeof(fileNames[0]), pstrcmp);
 
-                            // disease_node *head_disease = malloc(sizeof(disease_node));
-                            // head_disease->stats = malloc(sizeof(Stats));
-                            // strcpy(head_disease->stats->diseaseID,"HEAD");
-                            // head_disease->next = NULL; 
+                            disease_node *head_disease = malloc(sizeof(disease_node));
+                            head_disease->stats = malloc(sizeof(Stats));
+                            strcpy(head_disease->stats->diseaseID,"HEAD");
+                            head_disease->next = NULL; 
                             
                             int dis;
 
@@ -618,10 +813,10 @@ int main (int argc,char* argv[]){
                             char* line = NULL;
                             size_t len = 0;
 
+                            
                             // for every file - open file
-
-                            int p = numWorkers;
                             for (int i = 0; i < files; i++) {
+
 
                                 char m[buffsize];
                                 char chosen[100];
@@ -641,58 +836,47 @@ int main (int argc,char* argv[]){
                                 free(in);
 
 
-                                // if(p > 0){
+                                //stats
+                                disease_node *temp_dis = head_disease->next;
 
+                                while (temp_dis!=NULL){
+                                    strcpy(temp_dis->stats->countryName,buf);
+                                    strcpy(temp_dis->stats->date,chosen);
+                                    
+                                    fprintf(filestat[position], "%s\n",temp_dis->stats->date);
+                                    fprintf(filestat[position], "%s\n",temp_dis->stats->countryName);
+                                    fprintf(filestat[position], "%s\n",temp_dis->stats->diseaseID);
+                                    fprintf(filestat[position], "Age range 0-20 years: %d cases\n",temp_dis->stats->range1);
+                                    fprintf(filestat[position], "Age range 21-40 years: %d cases\n",temp_dis->stats->range2); 
+                                    fprintf(filestat[position], "Age range 41-60 years: %d cases\n",temp_dis->stats->range3);
+                                    fprintf(filestat[position], "Age range 60+ years: %d cases\n\n",temp_dis->stats->range4);
 
-                                //     array[p] = malloc(sizeof(disease_node));
+                                    temp_dis=temp_dis->next;
 
-                                //     strcpy(array[p],head_disease->stats);
-
-
-                                //     p--;
-
-
-                                // }
-
-                                // //stats
-                                // disease_node *temp_dis = head_disease->next;
-
+                                }
+                                temp_dis = head_disease->next;
+                                
                                 // while (temp_dis!=NULL){
-                                //     strcpy(temp_dis->stats->countryName,buf);
-                                //     strcpy(temp_dis->stats->date,chosen);
-                                //     // if (res= write(writefd,temp_dis->stats,sizeof(Stats) ) == 0) {
-                                //     //     perror ( "problem in writing \n" ) ;
-                                //     // }
-                                //     //printf("hihi\n");
-                                //     temp_dis=temp_dis->next;
+                                //  temp_dis2=temp_dis;
+                                //  temp_dis=temp_dis->next;
+                                //  free(temp_dis2);
                                 // }
-                                // disease_node *temp_dis2 = NULL;
-                                // temp_dis = head_disease->next;
                                 
-                                // // while (temp_dis!=NULL){
-                                // //  temp_dis2=temp_dis;
-                                // //  temp_dis=temp_dis->next;
-                                // //  free(temp_dis2);
-                                // // }
-                                
-                                // head_disease->next = NULL;
+                                head_disease->next = NULL;
 
+                                
 
 
                             } 
+                            if(fclose(filestat[position]) == 0){
 
 
+                                printf("closed file %d\n",position );
+                            }else printf("cant close file %d\n",position );
 
                            // free(head_disease->stats);
                            // free(head_disease);
 
-                            // Stats *eof_stats = malloc(sizeof(Stats)) ;
-                            // strcpy(eof_stats->diseaseID,"ENDOFFOLDER");
-                            // if (res= write(writefd,eof_stats,sizeof(Stats) ) == 0) {
-                            //     perror ( "problem in writing \n" ) ;
-                            // }
-
-                          //  free(eof_stats);
 
                             //free fileNames array
                             for(int k=0;k<files;k++){
@@ -705,24 +889,7 @@ int main (int argc,char* argv[]){
 
 
                         } //end of while
-
-
-
-
-                // printf("Now listening for connections..\n");
-
-                // if (listen(sock,5) < 0 ){
-                //     perror("ERROR: Linstening failed\n");
-                //     return 3;
-                // }
-
-
-
-
-
-
-
-                    
+   
                     }
                     
             }//end of else for child

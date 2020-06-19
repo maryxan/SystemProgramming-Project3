@@ -74,6 +74,7 @@ typedef struct command_data {
 int i = 0;
 void* thread(void *temp)
 {	
+	FILE *fptr;
 
 	roundBuffer * tempworker = (roundBuffer*) temp;
 	
@@ -95,6 +96,7 @@ void* thread(void *temp)
 
 
    		char buf[100];
+   		char buffcpy[100];
 		int res;
 
 
@@ -109,14 +111,88 @@ void* thread(void *temp)
             break;
 
 
+        strcpy(buffcpy,buf);
+
+        // an exw epikoinwnia me tous workers
+
+        if(strcmp(strtok(buffcpy,"_"), "stats") == 0 ){
+
+
+        	printf("Reading the statistics ..\n");
+
+        	char str[20];
+
+
+        	fptr = fopen(buf,"r");
+
+
+        	fgets(str,6,fptr);
+
+
+        	printf("str %s and %zu\n",str,strlen(str));
+
+        	ports[i] = atoi(str);
+
+
+        } 
+ 
+        // einai o client ara stelnw queries	
+        else {
+
+
+        printf("client\n");
+        // struct sockaddr_in addr;
+		// int fd;
+
+		// fd = socket(AF_INET, SOCK_STREAM, 0);
+		// if(fd == -1)
+		// {
+		//     perror("Error opening socket\n");
+		// }
+
+	 //    memset(&addr, 0, sizeof(addr));        /*Zero out structure*/ 
+		// addr.sin_port = htons(atoi(buf));
+		// addr.sin_addr.s_addr = INADDR_ANY;
+		// addr.sin_family = AF_INET;
+
+		// // int tr=1;
+
+  // //       // kill "Address already in use" error message
+  // //        if (setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&tr,sizeof(int)) == -1) {
+  // //           perror("setsockopt");
+  // //           exit(1);
+  // //       }
+
+		// // if(bind(fd, (struct sockaddr *)&addr,sizeof(struct sockaddr_in) ) == -1)
+		// // {
+		// //     perror("Error binding socket\n");
+		// // } 
+		// // else printf("binding ok\n");
+
+		// if(connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) 
+  //       { 
+  //           perror("\nConnection Failed \n");
+
+  //       }  
+
+  //       write(fd,buf,sizeof(buf));
+
+
+        }
         printf("BUF IS %s\n",buf);
 
-        printf("i is %d\n",i );
-        ports[i] = ret;
+  //       printf("i is %d\n",i );
 
-		i++;
+  //      
+
+		// i++;
+
+
+		
 
 	    pthread_mutex_unlock(&lock); // unlocking 
+
+
 
 		
 	}
@@ -455,7 +531,7 @@ int main (int argc,char* argv[]){
 
 		}
 		// an parw request apo ton client
-		else {
+			else {
 
 			printf("Client connection\n");
 
@@ -467,7 +543,7 @@ int main (int argc,char* argv[]){
 				return 3;
 			}
 			
-			printf("%d\n",newsock);	
+			printf("fd is %d\n",newsock);	
 			
 			if ( (rem=gethostbyaddr((char*)&client.sin_addr.s_addr,
 			 sizeof(client.sin_addr.s_addr), client.sin_family ))==NULL){
@@ -483,90 +559,61 @@ int main (int argc,char* argv[]){
 
 				int i = 0;
 
-				while(1){
+				// while(1){
+					sleep(1);
+					pthread_mutex_lock(&lock);
 
-					bzero(buff, sizeof(buff)); 
-					//memset(buff, '\0', sizeof (buff));
+					printf("GOT FD %d\n",newsock);
 
-					if ((res = read(newsock, buff, sizeof(buff)) ) < 0 ) {
+					// while(1){
 
-						perror ( "problem in reading \n" ) ;
-						break;
-					}
-					else if (res == 0)
-				    	break;
+						roundbuffer->fd = newsock;
+
+						printf("%d\n",roundbuffer->fd);
+
+						//push(roundbuffer,roundbuffer->fd);
+						// printf("apo to struct %d\n",roundbuffer->fd );
+
+						pthread_cond_signal(&write_cond);
+
+					// }
+
+					
+					pthread_mutex_unlock(&lock);
+
+					// bzero(buff, sizeof(buff)); 
+					// //memset(buff, '\0', sizeof (buff));
+
+					// if ((res = read(newsock, buff, sizeof(buff)) ) < 0 ) {
+
+					// 	perror ( "problem in reading \n" ) ;
+					// 	break;
+					// }
+					// else if (res == 0)
+				 //    	break;
 				   	
-				    data->noOlines ++;
-				    data->command[i] = malloc((strlen(buff)+1)*sizeof(char));
+				 //    data->noOlines ++;
+				 //    data->command[i] = malloc((strlen(buff)+1)*sizeof(char));
 
-				    strcpy(data->command[i],buff);
-				    i++;
+				 //    strcpy(data->command[i],buff);
+				 //    i++;
 
-				    // print buffer which contains the client contents 
-				    printf("message from client: %s\n", buff); 
+				 //    // print buffer which contains the client contents 
+				 //    printf("message from client: %s\n", buff); 
 
-				    bzero(buff, sizeof(buff)); 
+				 //    bzero(buff, sizeof(buff)); 
 
 					 
-					strcpy(buff,"exit");
+					// strcpy(buff,"exit");
 
-					sleep(2);
-				    write(newsock, buff, sizeof(buff)); 
+					// sleep(1);
+				 //    write(newsock, buff, sizeof(buff)); 
 
-				}
+				// }
 
 
 
 		}
-	}
-
-
-	// //diavazw ta statistics apo tous workers
- //        Stats *get_stats = malloc(sizeof(Stats));
- //        for (int i = 0; i < numWorkers; ++i){
-
- //            int nread,print_folder=1;
- //            char prev_date[100]="";
- //            do {
- //                if((nread = read(readfds[i],get_stats,sizeof(Stats))) < 0){
- //                    perror ( " Error in Reading " );
- //                }
- //                if(print_folder==1){
- //                    print_folder = 0;
- //                    printf("%s\n",get_stats->countryName);
- //                }
- //                if(strcmp(get_stats->diseaseID,"ENDOFFOLDER")==0){
- //                    print_folder = 1;
- //                    folders[i]--;
- //                    continue;
- //                }
- //                if(strcmp(prev_date,get_stats->date)!=0){
- //                    printf("%s\n",get_stats->date);
- //                    strcpy(prev_date,get_stats->date);
- //                }
- //                printf("%s\n",get_stats->diseaseID);
- //                printf("Age range 0-20 years: %d cases\n",get_stats->range1);
- //                printf("Age range 21-40 years: %d cases\n",get_stats->range2);
- //                printf("Age range 41-60 years: %d cases\n",get_stats->range3);
- //                printf("Age range 60+ years: %d cases\n",get_stats->range4);
- //            }while (folders[i]>0);
-
- //        }
- //        free(get_stats);
-
-
-
-	
-
-
-
-
-
-
-
-
-
-
-
+	}	
 
 }
