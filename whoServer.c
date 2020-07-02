@@ -41,34 +41,6 @@ typedef struct command_data {
    char **command;
    int num;
 }command_data;
-
-//////////////////////////////////////////////////////////////////////////////////////
-
-// Producer:
-
-// while (true) {
-//   /*produce item v */
-//   pthread_mutex_lock (&M);
-//   while ((in + 1) % n == out) pthread_cond_wait(&Out_CV, &M);
-//   b [in] = v;
-//   in = (in + 1) % n;
-//   pthread_cond_signal (&In_CV);
-//   pthread_mutex_unlock (&M);
-// }
-
-// Consumer:
-
-// while (true) {
-//   pthread_mutex_lock (&M);
-//   while (in == out) pthread_cond_wait(&In_CV, &M);
-//   w = b [out];
-//   out = (out + 1) % n;
-//   pthread_mutex_unlock (&M);
-//   pthread_cond_signal (&Out_CV);
-//   /*consume item w */
-// }
-
-/////////////////////////////////////////////////////////////////////////////////////////
 	
 
 int i = 0;
